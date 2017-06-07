@@ -20,18 +20,22 @@
 #include <cstring>
 #include <unistd.h>
 #include <map>
+#include <iomanip>
 
 NS_LOG_COMPONENT_DEFINE ("WifiExperiment1");
 
 using namespace ns3;
 
-uint16_t maxDistance = 50; // m //最大传播距离
+uint16_t maxDistance = 100; // m //最大传播距离
 uint32_t packetSize  = 1000; // bytes
 uint16_t beaconPort  = 80;
-uint32_t numNodes    = 50;
+uint32_t numNodes    = 210;
 uint32_t numPackets  = 1;
 Time live_time       = MilliSeconds(10);
 double interval      = 12.0; // MilliSeconds schedule可能会产生冲突
+bool verbose = false;
+uint32_t RXERROR = 0;
+uint32_t RXOK = 0;
 NodeContainer source_nodes;
 struct Neighbor
 {
@@ -325,14 +329,38 @@ void Broadcast ( NodeContainer source_nodes, uint32_t sender, Time interPacketIn
         }
 }
 
+void
+PhyRxOkTrace (std::string context, Ptr<const Packet> packet, double
+snr, WifiMode mode, enum WifiPreamble preamble)
+{
+	RXOK +=1;
+	if (verbose) {
+		std::cout << "PHYRXOK mode=" << mode << " snr=" << snr << " " <<
+  *packet << std::endl;
+	}
+
+
+}
+
+void
+PhyRxErrorTrace (std::string context, Ptr<const Packet> packet, double
+snr)
+{
+	RXERROR +=1;
+	if (verbose) {
+		std::cout << "PHYRXERROR snr=" << snr << " " << *packet <<
+  std::endl;
+	}
+}
 
 int main (int argc, char *argv[])
 {
-    //LogComponentEnable("PropagationLossModel",LOG_DEBUG);
+  // LogComponentEnable("PropagationLossModel",LOG_DEBUG);
+  // LogComponentEnable ("YansWifiPhy", LOG_LEVEL_DEBUG);
   std::string phyMode ("DsssRate1Mbps");
   std::string traceFile;
 
-  bool verbose = false;
+
   //bool tracing = false;
 
   CommandLine cmd;
@@ -422,7 +450,8 @@ int main (int argc, char *argv[])
       mobility.Install ();
   }
 
-
+  Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxOk",MakeCallback(&PhyRxOkTrace));
+  Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxError",MakeCallback(&PhyRxErrorTrace));
 
    InternetStackHelper internet;
    internet.Install (source_nodes);
@@ -448,7 +477,7 @@ int main (int argc, char *argv[])
   //wifiPhy.EnablePcap ("wifi-experiment1", source_devices);
   AnimationInterface anim("beacon1.xml");
 
-  Simulator::Stop(MilliSeconds(38));
+  Simulator::Stop(MilliSeconds(70));
   Simulator::Run ();
 
   NS_LOG_UNCOND( "neighbor table: ");
@@ -469,8 +498,10 @@ int main (int argc, char *argv[])
     }
     std::cout  << '\n';
   }
+  double p =(RXERROR + RXOK/2);
 
-  std::cout << "total number : " << recount << '\n';
+  std::cout << "total number : " << recount  << " Prob: "<<RXERROR/p<< '\n';
+
   Simulator::Destroy ();
 
   return 0;

@@ -25,13 +25,16 @@ NS_LOG_COMPONENT_DEFINE ("WifiExperiment1");
 
 using namespace ns3;
 
-uint16_t maxDistance = 50; // m //最大传播距离
-uint32_t packetSize = 1000; // bytes
-uint16_t beaconPort = 80;
-uint32_t numNodes = 50;
-uint32_t numPackets = 1;
-Time live_time = Seconds(10);
-double interval = 10.0; // seconds schedule可能会产生冲突
+uint16_t maxDistance = 100; // m //最大传播距离
+uint32_t packetSize  = 1000; // bytes
+uint16_t beaconPort  = 80;
+uint32_t numNodes    = 200;
+uint32_t numPackets  = 1;
+Time live_time       = Seconds(10);
+bool verbose         = false;
+uint32_t RXERROR     = 0;
+uint32_t RXOK        = 0;
+double interval      = 10.0; // seconds schedule可能会产生冲突
 NodeContainer source_nodes;
 
 std::map<int, EventId> whole_event;
@@ -68,6 +71,7 @@ static void GenerateTraffic (Ptr<Socket> socket, uint32_t pktSize,
 
 void ReceivePacket (Ptr<Socket> socket)
 {
+
 
   Ptr<Packet> receivedPacket;
   Address sourceAddress;
@@ -117,7 +121,7 @@ void ReceivePacket (Ptr<Socket> socket)
 
 
        double conWindow = 0.3*(distance -  maxDistance)*(distance - maxDistance)/ (snrValue - 100);
-       NS_LOG_UNCOND (sdId << "distance to " << nodeId <<" : "<< distance <<" Received Packet with SNR =" << snrValue << "contention window: "<< conWindow );
+       //NS_LOG_UNCOND (sdId << "distance to " << nodeId <<" : "<< distance <<" Received Packet with SNR =" << snrValue << "contention window: "<< conWindow );
        if (conWindow < 0) {
            conWindow = 1;
        }
@@ -174,7 +178,29 @@ void Broadcast ( NodeContainer source_nodes, uint32_t sender, Time interPacketIn
 
 }
 
+void
+PhyRxOkTrace (std::string context, Ptr<const Packet> packet, double
+snr, WifiMode mode, enum WifiPreamble preamble)
+{
+	RXOK +=1;
+	if (verbose) {
+		std::cout << "PHYRXOK mode=" << mode << " snr=" << snr << " " <<
+  *packet << std::endl;
+	}
 
+
+}
+
+void
+PhyRxErrorTrace (std::string context, Ptr<const Packet> packet, double
+snr)
+{
+	RXERROR +=1;
+	if (verbose) {
+		std::cout << "PHYRXERROR snr=" << snr << " " << *packet <<
+  std::endl;
+	}
+}
 
 int main (int argc, char *argv[])
 {
@@ -182,7 +208,7 @@ int main (int argc, char *argv[])
   std::string phyMode ("DsssRate1Mbps");
   std::string traceFile;
 
-  bool verbose = false;
+
   //bool tracing = false;
 
   CommandLine cmd;
@@ -262,7 +288,7 @@ int main (int argc, char *argv[])
                                       "LayoutType", StringValue ("RowFirst"));
         //mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
        mobility.SetMobilityModel ("ns3::RandomDirection2dMobilityModel",
-                                   "Bounds", RectangleValue (Rectangle (0, 500,0,500)),
+                                   "Bounds", RectangleValue (Rectangle (0, 500,0,100)),
                                    "Speed", StringValue ("ns3::ConstantRandomVariable[Constant=10.0]"),
                                    "Pause", StringValue ("ns3::ConstantRandomVariable[Constant=0.2]"));
 
@@ -288,12 +314,14 @@ int main (int argc, char *argv[])
     				   source_nodes, sender, Seconds(interval),2);
   whole_event[sender] = bMessage;
 
+  Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxOk",MakeCallback(&PhyRxOkTrace));
+  Config::Connect("/NodeList/*/DeviceList/*/Phy/State/RxError",MakeCallback(&PhyRxErrorTrace));
 
   // Tracing
   wifiPhy.EnablePcap ("wifi-experiment1", source_devices);
   AnimationInterface anim("beacon-other.xml");
 
-  Simulator::Stop(MilliSeconds(30));
+  Simulator::Stop(MilliSeconds(70));
   Simulator::Run ();
   int recount = 0;
   for ( int i =0; i< state.size(); i++) {
@@ -306,7 +334,8 @@ int main (int argc, char *argv[])
         }
     std::cout  << '\n';
   }
-  std::cout << "total number :" << recount << '\n';
+  double p = (RXERROR + RXOK/2);
+   std::cout << "total number : " << recount << "asd" << RXERROR <<" asd" << RXOK <<" Prob: " << RXERROR/p << '\n';
   Simulator::Destroy ();
 
   return 0;
